@@ -1,19 +1,21 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { extractAndParseJson, validateStudySet } from './validator.js';
 import { getMockStudySet } from './mockData.js';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Using gemini-1.5-flash which is fast and supports free-tier access
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// gemini-2.5-flash is Google's active, high-speed free tier model
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 /**
  * System instruction enforcing strict JSON response format.
  */
 const SYSTEM_INSTRUCTION = `
-You are an expert educational AI and curriculum designer.
+You are an expert educational curriculum designer.
 Given study notes, text, or a topic, your job is to generate a structured, comprehensive interactive study set.
 
 CRITICAL REQUIREMENTS:
@@ -68,28 +70,20 @@ export async function generateStudySet({
   existingData = null,
   refinementInstruction = '',
 }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
   // If no Gemini API key configured, use deterministic rich mock fallback
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here') {
+  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
     console.warn('[GeminiService] No GEMINI_API_KEY provided; operating in Mock Fallback mode.');
     const mockData = getMockStudySet(text, mode, difficulty);
-    return { data: mockData, source: 'mock-engine', warning: 'Operating in demo/mock mode. Add GEMINI_API_KEY in .env for live Gemini generation.' };
+    return {
+      data: mockData,
+      source: 'mock-engine',
+      warning: 'Operating in demo mode. Add GEMINI_API_KEY in .env for live Gemini generation.',
+    };
   }
 
-  let userPrompt = '';
-
-  if (isRefinement && existingData && refinementInstruction) {
-    userPrompt = `
-Here is the existing study set JSON:
-${JSON.stringify(existingData, null, 2)}
-
-Refinement Request:
-"${refinementInstruction}"
-
-Please update the study set according to the refinement request while preserving the overall JSON schema and any relevant existing progress.
-Output ONLY the updated valid JSON.
-`;
-  } else {
-    userPrompt = `
+  let userPrompt = `
 Generate an interactive study set for the following study material or topic:
 
 ---
@@ -97,15 +91,14 @@ ${text}
 ---
 
 Configuration:
-- Target Mode: ${mode} (all = both flashcards and quiz; flashcards = only flashcards; quiz = only quiz)
+- Target Mode: ${mode} (generate both flashcards and quiz questions)
 - Difficulty Level: ${difficulty}
-- Minimum flashcards: ${mode === 'quiz' ? 0 : 4}
-- Minimum quiz questions: ${mode === 'flashcards' ? 0 : 3}
+- Minimum flashcards: 4
+- Minimum quiz questions: 3
 - Minimum key concepts: 3
 
-Remember: Output ONLY the JSON object.
+Remember: Output ONLY valid JSON adhering strictly to the schema.
 `;
-  }
 
   const requestBody = {
     contents: [
@@ -124,8 +117,10 @@ Remember: Output ONLY the JSON object.
     },
   };
 
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
   try {
-    const response = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -159,7 +154,7 @@ Remember: Output ONLY the JSON object.
     }
 
     const rawOutput = candidate.content.parts[0].text;
-    
+
     // Parse through resilient JSON extractor
     const parsed = extractAndParseJson(rawOutput);
 
