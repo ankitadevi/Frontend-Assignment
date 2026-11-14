@@ -1,6 +1,7 @@
-import React from 'react';
-import { Brain, Sparkles, BookOpen, HelpCircle, CheckSquare, Layers } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Brain, Sparkles, BookOpen, HelpCircle, CheckSquare, Layers, History, Download } from 'lucide-react';
 import { useStudyAssistant } from './hooks/useStudyAssistant';
+import { useLocalStorage } from './hooks/useLocalStorage';
 import InputSection from './components/InputSection';
 import LoadingState from './components/LoadingState';
 import ErrorState from './components/ErrorState';
@@ -8,11 +9,13 @@ import FlashcardsView from './components/FlashcardsView';
 import QuizView from './components/QuizView';
 import KeyConceptsView from './components/KeyConceptsView';
 import RefinementBar from './components/RefinementBar';
+import HistoryDrawer from './components/HistoryDrawer';
 import { SAMPLE_TOPICS } from './utils/constants';
 
 export default function App() {
   const {
     studySet,
+    setStudySet,
     status,
     error,
     warning,
@@ -24,6 +27,79 @@ export default function App() {
     retryLast,
     resetAll,
   } = useStudyAssistant();
+
+  // Local storage sessions persistence
+  const [history, setHistory] = useLocalStorage('studycraft_sessions', []);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+
+  // Automatically save successful generations to history
+  useEffect(() => {
+    if (studySet && status === 'success') {
+      const existingIdx = history.findIndex(
+        (h) => h.data?.topic?.toLowerCase() === studySet.topic?.toLowerCase()
+      );
+
+      const sessionObj = {
+        id: currentSessionId || `session_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        data: studySet,
+      };
+
+      if (existingIdx >= 0) {
+        const updated = [...history];
+        updated[existingIdx] = sessionObj;
+        setHistory(updated);
+      } else {
+        setHistory([sessionObj, ...history.slice(0, 19)]); // keep latest 20
+        setCurrentSessionId(sessionObj.id);
+      }
+    }
+  }, [studySet, status]);
+
+  const handleSelectSession = (session) => {
+    setStudySet(session.data);
+    setCurrentSessionId(session.id);
+    if (session.data?.flashcards?.length) {
+      setActiveTab('flashcards');
+    } else if (session.data?.quiz?.length) {
+      setActiveTab('quiz');
+    }
+  };
+
+  const handleDeleteSession = (id) => {
+    setHistory((prev) => prev.filter((s) => s.id !== id));
+    if (currentSessionId === id) {
+      setCurrentSessionId(null);
+    }
+  };
+
+  const handleExportCurrent = () => {
+    if (!studySet) return;
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(studySet, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${studySet.topic.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_study_set.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleImportSession = (importedData) => {
+    if (!importedData.topic) {
+      alert('Imported JSON is missing a required topic field.');
+      return;
+    }
+    const newSession = {
+      id: `session_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      data: importedData,
+    };
+    setHistory([newSession, ...history]);
+    setStudySet(importedData);
+    setCurrentSessionId(newSession.id);
+    setActiveTab(importedData.flashcards?.length ? 'flashcards' : 'quiz');
+  };
 
   const handleUseSample = () => {
     const sample = SAMPLE_TOPICS[0];
@@ -55,6 +131,21 @@ export default function App() {
                 v1.0
               </span>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+            >
+              <History className="w-3.5 h-3.5 text-brand-500" />
+              <span>Saved Sets</span>
+              {history.length > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-brand-500 text-white text-[10px]">
+                  {history.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </header>
@@ -99,9 +190,19 @@ export default function App() {
                 <span className="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/50 px-3 py-1 rounded-full border border-brand-200/50 dark:border-brand-900/50">
                   {studySet.difficulty} Level Study Set
                 </span>
-                <span className="text-xs text-slate-400 font-medium">
-                  ⏱️ ~{studySet.estimatedStudyTimeMinutes || 15} min read
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400 font-medium">
+                    ⏱️ ~{studySet.estimatedStudyTimeMinutes || 15} min read
+                  </span>
+                  <button
+                    onClick={handleExportCurrent}
+                    className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline"
+                    title="Export JSON"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export
+                  </button>
+                </div>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white">
                 {studySet.topic}
@@ -204,6 +305,18 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* History Drawer */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        history={history}
+        onSelectSession={handleSelectSession}
+        onDeleteSession={handleDeleteSession}
+        onExportCurrent={studySet ? handleExportCurrent : null}
+        onImportSession={handleImportSession}
+        currentSessionId={currentSessionId}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
