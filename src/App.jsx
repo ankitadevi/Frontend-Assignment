@@ -1,9 +1,10 @@
 import React from 'react';
-import { Brain, Sparkles } from 'lucide-react';
+import { Brain, Sparkles, BookOpen, Layers } from 'lucide-react';
 import { useStudyAssistant } from './hooks/useStudyAssistant';
 import InputSection from './components/InputSection';
 import LoadingState from './components/LoadingState';
 import ErrorState from './components/ErrorState';
+import FlashcardsView from './components/FlashcardsView';
 import { SAMPLE_TOPICS } from './utils/constants';
 
 export default function App() {
@@ -13,6 +14,8 @@ export default function App() {
     error,
     warning,
     loadingStep,
+    activeTab,
+    setActiveTab,
     generate,
     retryLast,
     resetAll,
@@ -77,6 +80,37 @@ export default function App() {
             onRetry={retryLast}
             onUseSample={handleUseSample}
           />
+        )}
+
+        {/* Interactive Workspace when studySet is present */}
+        {status !== 'loading' && studySet && (
+          <section className="w-full max-w-4xl mx-auto mt-6">
+            {/* Topic Overview Header */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 mb-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/50 px-3 py-1 rounded-full border border-brand-200/50 dark:border-brand-900/50">
+                  {studySet.difficulty} Level Study Set
+                </span>
+                <span className="text-xs text-slate-400 font-medium">
+                  ⏱️ ~{studySet.estimatedStudyTimeMinutes || 15} min read
+                </span>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white">
+                {studySet.topic}
+              </h1>
+              <p className="mt-2 text-sm md:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
+                {studySet.summary}
+              </p>
+            </div>
+
+            {/* Flashcards View */}
+            {studySet.flashcards && studySet.flashcards.length > 0 && (
+              <FlashcardsView
+                flashcards={studySet.flashcards}
+                topic={studySet.topic}
+              />
+            )}
+          </section>
         )}
 
         {/* Empty / Welcome State when idle */}
