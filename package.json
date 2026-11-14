@@ -7,6 +7,8 @@
   "scripts": {
     "start": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"node server/index.js\" \"vite --host --port 5173\"",
     "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"node server/index.js\" \"vite\"",
+    "serve": "node server/index.js",
+    "start:prod": "node server/index.js",
     "server": "node server/index.js",
     "client": "vite",
     "build": "vite build",
