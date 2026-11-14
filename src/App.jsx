@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, Sparkles, BookOpen, HelpCircle, CheckSquare, Layers, History, Download } from 'lucide-react';
+import { Brain, Sparkles, BookOpen, HelpCircle, CheckSquare, Layers, History, Download, Sun, Moon, Keyboard } from 'lucide-react';
 import { useStudyAssistant } from './hooks/useStudyAssistant';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import InputSection from './components/InputSection';
@@ -10,6 +10,7 @@ import QuizView from './components/QuizView';
 import KeyConceptsView from './components/KeyConceptsView';
 import RefinementBar from './components/RefinementBar';
 import HistoryDrawer from './components/HistoryDrawer';
+import ShortcutsModal from './components/ShortcutsModal';
 import { SAMPLE_TOPICS } from './utils/constants';
 
 export default function App() {
@@ -27,6 +28,31 @@ export default function App() {
     retryLast,
     resetAll,
   } = useStudyAssistant();
+
+  // Dark mode state
+  const [isDarkMode, setIsDarkMode] = useLocalStorage('studycraft_darkmode', false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+
+  // Sync theme with HTML document
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  // Global '?' shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (e.key === '?') {
+        setIsShortcutsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Local storage sessions persistence
   const [history, setHistory] = useLocalStorage('studycraft_sessions', []);
@@ -115,7 +141,7 @@ export default function App() {
   const hasConcepts = Boolean(studySet?.keyConcepts?.length);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between selection:bg-brand-500 selection:text-white transition-colors duration-200">
       {/* Top Navbar */}
       <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -135,11 +161,27 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setIsShortcutsOpen(true)}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+            </button>
+
+            <button
               onClick={() => setIsHistoryOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
             >
               <History className="w-3.5 h-3.5 text-brand-500" />
-              <span>Saved Sets</span>
+              <span className="hidden sm:inline">Saved Sets</span>
               {history.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-brand-500 text-white text-[10px]">
                   {history.length}
@@ -316,6 +358,12 @@ export default function App() {
         onExportCurrent={studySet ? handleExportCurrent : null}
         onImportSession={handleImportSession}
         currentSessionId={currentSessionId}
+      />
+
+      {/* Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
 
       {/* Footer */}
