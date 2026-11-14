@@ -1,374 +1,208 @@
-import React, { useState, useEffect } from 'react';
-import { Brain, Sparkles, BookOpen, HelpCircle, CheckSquare, Layers, History, Download, Sun, Moon, Keyboard } from 'lucide-react';
-import { useStudyAssistant } from './hooks/useStudyAssistant';
-import { useLocalStorage } from './hooks/useLocalStorage';
-import InputSection from './components/InputSection';
-import LoadingState from './components/LoadingState';
-import ErrorState from './components/ErrorState';
+import React, { useState } from 'react';
+import { Brain, Sparkles, BookOpen, HelpCircle, RefreshCw, AlertCircle } from 'lucide-react';
 import FlashcardsView from './components/FlashcardsView';
 import QuizView from './components/QuizView';
-import KeyConceptsView from './components/KeyConceptsView';
-import RefinementBar from './components/RefinementBar';
-import HistoryDrawer from './components/HistoryDrawer';
-import ShortcutsModal from './components/ShortcutsModal';
-import { SAMPLE_TOPICS } from './utils/constants';
+
+const SAMPLE_TOPIC = "Photosynthesis: Process where plants use sunlight, water, and CO2 to create oxygen and energy in the form of sugar (glucose). Light-dependent reactions happen in thylakoid membranes releasing oxygen, while the Calvin cycle happens in the stroma synthesizing glucose.";
 
 export default function App() {
-  const {
-    studySet,
-    setStudySet,
-    status,
-    error,
-    warning,
-    loadingStep,
-    activeTab,
-    setActiveTab,
-    generate,
-    refine,
-    retryLast,
-    resetAll,
-  } = useStudyAssistant();
+  const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [studyData, setStudyData] = useState(null);
+  const [activeTab, setActiveTab] = useState('flashcards');
 
-  // Dark mode state
-  const [isDarkMode, setIsDarkMode] = useLocalStorage('studycraft_darkmode', false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  // Generate study materials from AI backend
+  const handleGenerate = async (textToUse) => {
+    const text = textToUse || inputText;
+    if (!text.trim()) return;
 
-  // Sync theme with HTML document
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
+    setLoading(true);
+    setError(null);
 
-  // Global '?' shortcut listener
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-      if (e.key === '?') {
-        setIsShortcutsOpen((prev) => !prev);
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Server error generating study set');
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
-  // Local storage sessions persistence
-  const [history, setHistory] = useLocalStorage('studycraft_sessions', []);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState(null);
-
-  // Automatically save successful generations to history
-  useEffect(() => {
-    if (studySet && status === 'success') {
-      const existingIdx = history.findIndex(
-        (h) => h.data?.topic?.toLowerCase() === studySet.topic?.toLowerCase()
-      );
-
-      const sessionObj = {
-        id: currentSessionId || `session_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        data: studySet,
-      };
-
-      if (existingIdx >= 0) {
-        const updated = [...history];
-        updated[existingIdx] = sessionObj;
-        setHistory(updated);
-      } else {
-        setHistory([sessionObj, ...history.slice(0, 19)]); // keep latest 20
-        setCurrentSessionId(sessionObj.id);
-      }
-    }
-  }, [studySet, status]);
-
-  const handleSelectSession = (session) => {
-    setStudySet(session.data);
-    setCurrentSessionId(session.id);
-    if (session.data?.flashcards?.length) {
+      const result = await response.json();
+      setStudyData(result.data);
       setActiveTab('flashcards');
-    } else if (session.data?.quiz?.length) {
-      setActiveTab('quiz');
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please retry.');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handleDeleteSession = (id) => {
-    setHistory((prev) => prev.filter((s) => s.id !== id));
-    if (currentSessionId === id) {
-      setCurrentSessionId(null);
-    }
-  };
-
-  const handleExportCurrent = () => {
-    if (!studySet) return;
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(studySet, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `${studySet.topic.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_study_set.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
-  const handleImportSession = (importedData) => {
-    if (!importedData.topic) {
-      alert('Imported JSON is missing a required topic field.');
-      return;
-    }
-    const newSession = {
-      id: `session_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      data: importedData,
-    };
-    setHistory([newSession, ...history]);
-    setStudySet(importedData);
-    setCurrentSessionId(newSession.id);
-    setActiveTab(importedData.flashcards?.length ? 'flashcards' : 'quiz');
   };
 
   const handleUseSample = () => {
-    const sample = SAMPLE_TOPICS[0];
-    generate({
-      text: sample.prompt,
-      mode: 'all',
-      difficulty: 'Intermediate',
-    });
+    setInputText(SAMPLE_TOPIC);
+    handleGenerate(SAMPLE_TOPIC);
   };
 
-  const hasFlashcards = Boolean(studySet?.flashcards?.length);
-  const hasQuiz = Boolean(studySet?.quiz?.length);
-  const hasConcepts = Boolean(studySet?.keyConcepts?.length);
-
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between selection:bg-brand-500 selection:text-white transition-colors duration-200">
-      {/* Top Navbar */}
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+      {/* Simple Header */}
+      <header className="border-b border-slate-200 bg-white sticky top-0 z-20">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold">
               <Brain className="w-5 h-5" />
             </div>
-            <div>
-              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-brand-600 to-indigo-600 bg-clip-text text-transparent dark:from-brand-400 dark:to-indigo-300">
-                StudyCraft AI
-              </span>
-              <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-800">
-                v1.0
-              </span>
-            </div>
+            <span className="font-bold text-lg text-slate-800">
+              StudyCraft AI
+            </span>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsShortcutsOpen(true)}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
-              title="Keyboard shortcuts (?)"
-            >
-              <Keyboard className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
-              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
-            </button>
-
-            <button
-              onClick={() => setIsHistoryOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
-            >
-              <History className="w-3.5 h-3.5 text-brand-500" />
-              <span className="hidden sm:inline">Saved Sets</span>
-              {history.length > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-brand-500 text-white text-[10px]">
-                  {history.length}
-                </span>
-              )}
-            </button>
-          </div>
+          <span className="text-xs text-slate-500 font-medium">
+            AI Study Assistant
+          </span>
         </div>
       </header>
 
-      {/* Main Body */}
-      <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
-        {/* Warning Banner if using mock fallback */}
-        {warning && (
-          <div className="max-w-4xl mx-auto mb-4 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs rounded-xl flex items-center justify-between">
-            <span>ℹ️ {warning}</span>
+      {/* Main Container */}
+      <main className="max-w-4xl mx-auto px-4 py-8 flex-1 w-full">
+        {/* Simple Input Form */}
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mb-6">
+          <h2 className="text-base font-bold text-slate-800 mb-1">
+            Generate Flashcards &amp; Quiz
+          </h2>
+          <p className="text-xs text-slate-500 mb-4">
+            Paste your lecture notes, article, or topic below:
+          </p>
+
+          <textarea
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            disabled={loading}
+            rows={4}
+            placeholder="e.g. Paste notes on Photosynthesis, World War II, or Git version control..."
+            className="w-full p-3 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+          />
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={handleUseSample}
+              disabled={loading}
+              className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-1"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Try sample notes (Photosynthesis)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleGenerate()}
+              disabled={loading || !inputText.trim()}
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold shadow-sm transition-colors"
+            >
+              {loading ? 'Generating...' : 'Create Study Set'}
+            </button>
+          </div>
+        </section>
+
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="text-center py-12">
+            <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
+            <p className="text-sm font-semibold text-slate-700">
+              AI is formulating your flashcards and quiz...
+            </p>
+            <p className="text-xs text-slate-400 mt-1">Parsing structured JSON</p>
           </div>
         )}
 
-        {/* Input Interface */}
-        <InputSection
-          onGenerate={generate}
-          isLoading={status === 'loading'}
-          onClear={resetAll}
-          currentStudySet={studySet}
-        />
-
-        {/* Loading State */}
-        {status === 'loading' && (
-          <LoadingState step={loadingStep} onCancel={resetAll} />
+        {/* Error Banner with Retry */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 my-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-red-900">Generation Failed</h4>
+              <p className="text-xs text-red-700 mt-0.5">{error}</p>
+              <button
+                onClick={() => handleGenerate()}
+                className="mt-2 text-xs font-semibold text-red-800 underline hover:text-red-950"
+              >
+                Click here to retry
+              </button>
+            </div>
+          </div>
         )}
 
-        {/* Error State */}
-        {status === 'error' && (
-          <ErrorState
-            error={error}
-            onRetry={retryLast}
-            onUseSample={handleUseSample}
-          />
-        )}
-
-        {/* Interactive Workspace when studySet is present */}
-        {status !== 'loading' && studySet && (
-          <section className="w-full max-w-4xl mx-auto mt-6">
-            {/* Topic Overview Header */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 mb-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/50 px-3 py-1 rounded-full border border-brand-200/50 dark:border-brand-900/50">
-                  {studySet.difficulty} Level Study Set
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 font-medium">
-                    ⏱️ ~{studySet.estimatedStudyTimeMinutes || 15} min read
-                  </span>
-                  <button
-                    onClick={handleExportCurrent}
-                    className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline"
-                    title="Export JSON"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Export
-                  </button>
-                </div>
-              </div>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white">
-                {studySet.topic}
+        {/* Interactive Workspace */}
+        {!loading && studyData && (
+          <section className="mt-4">
+            {/* Topic Summary */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm">
+              <span className="text-xs font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2.5 py-0.5 rounded-full">
+                {studyData.difficulty || 'Study Set'}
+              </span>
+              <h1 className="text-xl font-bold text-slate-900 mt-2">
+                {studyData.topic}
               </h1>
-              <p className="mt-2 text-sm md:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
-                {studySet.summary}
+              <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+                {studyData.summary}
               </p>
             </div>
 
-            {/* Interactive Workspace Tab Selector */}
-            <div className="flex items-center justify-center gap-2 mb-6 p-1.5 bg-slate-200/70 dark:bg-slate-900 rounded-2xl max-w-lg mx-auto">
-              {hasFlashcards && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('flashcards')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs md:text-sm font-bold transition-all ${
-                    activeTab === 'flashcards'
-                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  <BookOpen className="w-4 h-4" />
-                  Flashcards ({studySet.flashcards.length})
-                </button>
-              )}
+            {/* Simple Tab Switcher: Flashcards vs Quiz */}
+            <div className="flex gap-2 mb-6 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('flashcards')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${
+                  activeTab === 'flashcards'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                Flashcards ({studyData.flashcards?.length || 0})
+              </button>
 
-              {hasQuiz && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('quiz')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs md:text-sm font-bold transition-all ${
-                    activeTab === 'quiz'
-                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  <HelpCircle className="w-4 h-4" />
-                  Quiz ({studySet.quiz.length})
-                </button>
-              )}
-
-              {hasConcepts && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('concepts')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs md:text-sm font-bold transition-all ${
-                    activeTab === 'concepts'
-                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  <CheckSquare className="w-4 h-4" />
-                  Concepts ({studySet.keyConcepts.length})
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setActiveTab('quiz')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${
+                  activeTab === 'quiz'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <HelpCircle className="w-4 h-4" />
+                Quiz ({studyData.quiz?.length || 0})
+              </button>
             </div>
 
-            {/* Active Workspace View */}
-            {activeTab === 'flashcards' && hasFlashcards && (
+            {/* Flashcards View */}
+            {activeTab === 'flashcards' && studyData.flashcards && (
               <FlashcardsView
-                flashcards={studySet.flashcards}
-                topic={studySet.topic}
+                flashcards={studyData.flashcards}
+                topic={studyData.topic}
               />
             )}
 
-            {activeTab === 'quiz' && hasQuiz && (
+            {/* Quiz View with Re-test Wrong Answers */}
+            {activeTab === 'quiz' && studyData.quiz && (
               <QuizView
-                quiz={studySet.quiz}
-                topic={studySet.topic}
+                quiz={studyData.quiz}
+                topic={studyData.topic}
               />
             )}
-
-            {activeTab === 'concepts' && hasConcepts && (
-              <KeyConceptsView
-                keyConcepts={studySet.keyConcepts}
-                topic={studySet.topic}
-              />
-            )}
-
-            {/* Refinement Loop Component */}
-            <RefinementBar
-              onRefine={refine}
-              isLoading={status === 'loading'}
-            />
           </section>
-        )}
-
-        {/* Empty / Welcome State when idle */}
-        {status === 'idle' && !studySet && (
-          <div className="max-w-2xl mx-auto text-center py-12 px-4">
-            <div className="inline-flex p-3 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 mb-4 border border-brand-200 dark:border-brand-800">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">
-              Ready to create your custom study tool
-            </h3>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-              Choose one of the sample topics above or paste your course notes to see structured flashcards and quizzes rendered in real-time.
-            </p>
-          </div>
         )}
       </main>
 
-      {/* History Drawer */}
-      <HistoryDrawer
-        isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
-        history={history}
-        onSelectSession={handleSelectSession}
-        onDeleteSession={handleDeleteSession}
-        onExportCurrent={studySet ? handleExportCurrent : null}
-        onImportSession={handleImportSession}
-        currentSessionId={currentSessionId}
-      />
-
-      {/* Shortcuts Modal */}
-      <ShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-        StudyCraft AI &bull; Built with React &amp; Google Gemini by Ankita Devi
+      {/* Simple Footer */}
+      <footer className="border-t border-slate-200 py-4 text-center text-xs text-slate-400 bg-white">
+        StudyCraft AI &bull; Built by Ankita Devi
       </footer>
     </div>
   );
