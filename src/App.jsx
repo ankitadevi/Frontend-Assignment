@@ -1,9 +1,35 @@
 import React from 'react';
-import { Sparkles, Brain, BookOpen, Layers } from 'lucide-react';
+import { Brain, Sparkles } from 'lucide-react';
+import { useStudyAssistant } from './hooks/useStudyAssistant';
+import InputSection from './components/InputSection';
+import LoadingState from './components/LoadingState';
+import ErrorState from './components/ErrorState';
+import { SAMPLE_TOPICS } from './utils/constants';
 
 export default function App() {
+  const {
+    studySet,
+    status,
+    error,
+    warning,
+    loadingStep,
+    generate,
+    retryLast,
+    resetAll,
+  } = useStudyAssistant();
+
+  const handleUseSample = () => {
+    const sample = SAMPLE_TOPICS[0];
+    generate({
+      text: sample.prompt,
+      mode: 'all',
+      difficulty: 'Intermediate',
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+      {/* Top Navbar */}
       <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -22,21 +48,56 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-16 flex-1 flex flex-col items-center justify-center text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 dark:bg-brand-950/50 border border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300 text-xs font-semibold mb-6">
-          <Sparkles className="w-3.5 h-3.5" />
-          AI-Powered Interactive Study Assistant
-        </div>
-        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-2xl">
-          Transform unstructured notes into <span className="bg-gradient-to-r from-brand-600 to-indigo-600 bg-clip-text text-transparent">interactive study tools</span>
-        </h1>
-        <p className="mt-4 text-base md:text-lg text-slate-600 dark:text-slate-400 max-w-xl">
-          Generate 3D flashcards, smart quizzes with instant explanations, and re-test weak concepts with fault-tolerant structured AI outputs.
-        </p>
+      {/* Main Body */}
+      <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
+        {/* Warning Banner if using mock fallback */}
+        {warning && (
+          <div className="max-w-4xl mx-auto mb-4 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs rounded-xl flex items-center justify-between">
+            <span>ℹ️ {warning}</span>
+          </div>
+        )}
+
+        {/* Input Interface */}
+        <InputSection
+          onGenerate={generate}
+          isLoading={status === 'loading'}
+          onClear={resetAll}
+          currentStudySet={studySet}
+        />
+
+        {/* Loading State */}
+        {status === 'loading' && (
+          <LoadingState step={loadingStep} onCancel={resetAll} />
+        )}
+
+        {/* Error State */}
+        {status === 'error' && (
+          <ErrorState
+            error={error}
+            onRetry={retryLast}
+            onUseSample={handleUseSample}
+          />
+        )}
+
+        {/* Empty / Welcome State when idle */}
+        {status === 'idle' && !studySet && (
+          <div className="max-w-2xl mx-auto text-center py-12 px-4">
+            <div className="inline-flex p-3 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 mb-4 border border-brand-200 dark:border-brand-800">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+              Ready to create your custom study tool
+            </h3>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              Choose one of the sample topics above or paste your course notes to see structured flashcards and quizzes rendered in real-time.
+            </p>
+          </div>
+        )}
       </main>
 
+      {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-        StudyCraft AI &bull; Built by Ankita Devi
+        StudyCraft AI &bull; Built with React &amp; Google Gemini by Ankita Devi
       </footer>
     </div>
   );
