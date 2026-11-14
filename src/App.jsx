@@ -1,10 +1,11 @@
 import React from 'react';
-import { Brain, Sparkles, BookOpen, Layers } from 'lucide-react';
+import { Brain, Sparkles, BookOpen, HelpCircle, Layers } from 'lucide-react';
 import { useStudyAssistant } from './hooks/useStudyAssistant';
 import InputSection from './components/InputSection';
 import LoadingState from './components/LoadingState';
 import ErrorState from './components/ErrorState';
 import FlashcardsView from './components/FlashcardsView';
+import QuizView from './components/QuizView';
 import { SAMPLE_TOPICS } from './utils/constants';
 
 export default function App() {
@@ -29,6 +30,9 @@ export default function App() {
       difficulty: 'Intermediate',
     });
   };
+
+  const hasFlashcards = Boolean(studySet?.flashcards?.length);
+  const hasQuiz = Boolean(studySet?.quiz?.length);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between selection:bg-brand-500 selection:text-white">
@@ -103,10 +107,50 @@ export default function App() {
               </p>
             </div>
 
-            {/* Flashcards View */}
-            {studySet.flashcards && studySet.flashcards.length > 0 && (
+            {/* Interactive Workspace Tab Selector */}
+            <div className="flex items-center justify-center gap-2 mb-6 p-1.5 bg-slate-200/70 dark:bg-slate-900 rounded-2xl max-w-md mx-auto">
+              {hasFlashcards && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('flashcards')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs md:text-sm font-bold transition-all ${
+                    activeTab === 'flashcards'
+                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Flashcards ({studySet.flashcards.length})
+                </button>
+              )}
+
+              {hasQuiz && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('quiz')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs md:text-sm font-bold transition-all ${
+                    activeTab === 'quiz'
+                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  Interactive Quiz ({studySet.quiz.length})
+                </button>
+              )}
+            </div>
+
+            {/* Active View */}
+            {activeTab === 'flashcards' && hasFlashcards && (
               <FlashcardsView
                 flashcards={studySet.flashcards}
+                topic={studySet.topic}
+              />
+            )}
+
+            {activeTab === 'quiz' && hasQuiz && (
+              <QuizView
+                quiz={studySet.quiz}
                 topic={studySet.topic}
               />
             )}
