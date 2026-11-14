@@ -1,10 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 import { generateStudySet } from './geminiService.js';
 import { extractAndParseJson, validateStudySet } from './validator.js';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,7 +25,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     service: 'StudyCraft AI API Server',
     author: 'Ankita Devi',
-    aiProvider: hasGeminiKey ? 'Gemini 1.5 Flash (Live)' : 'Mock Engine (Offline/Demo)',
+    aiProvider: hasGeminiKey ? 'Gemini 2.5 Flash (Live)' : 'Mock Engine (Offline/Demo)',
     hasGeminiKey,
   });
 });
@@ -81,15 +86,24 @@ app.post('/api/simulate-error', (req, res) => {
       });
 
     case 'timeout':
-      // Delay 15 seconds to test client AbortController
       return setTimeout(() => {
         res.json({ status: 'Delayed response completed' });
       }, 15000);
 
     default:
-      return res.status(400).json({ error: 'Unknown simulation type. Available: malformed_json, schema_mismatch, server_500, timeout' });
+      return res.status(400).json({ error: 'Unknown simulation type.' });
   }
 });
+
+// Serve frontend static files from dist in production (Render / Cloud deployment)
+const distPath = path.resolve(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(distPath, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`[StudyCraft Server] Running on http://localhost:${PORT}`);
